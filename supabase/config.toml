@@ -1,0 +1,30 @@
+# Konfigurasi Supabase CLI lokal. Dipakai kalau kamu menjalankan
+# `supabase start` / `supabase db push` dari komputer sendiri (butuh Docker
+# untuk `start`; `db push` ke project cloud tidak butuh Docker).
+project_id = "so-luthfi-barnik"
+
+[api]
+enabled = true
+port = 54321
+schemas = ["public", "graphql_public"]
+extra_search_path = ["public"]
+max_rows = 1000
+
+[db]
+port = 54322
+major_version = 17
+
+[studio]
+enabled = true
+port = 54323
+
+[auth]
+enabled = true
+site_url = "http://localhost:3000"
+additional_redirect_urls = ["http://localhost:3000"]
+jwt_expiry = 3600
+enable_signup = false          # staf dibuat lewat scripts/create-staff.mjs, bukan form daftar publik
+
+[auth.email]
+enable_signup = false
+enable_confirmations = false   # akun pakai email sintetis, tidak ada kotak masuk sungguhan

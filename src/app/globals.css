@@ -1,0 +1,17 @@
+@import "tailwindcss";
+
+:root {
+  --background: #fafaf9;
+  --foreground: #16191b;
+}
+
+@media (prefers-color-scheme: dark) {
+  :root {
+    --background: #0a0a0a;
+    --foreground: #ededed;
+  }
+}
+
+html {
+  scroll-padding-top: env(safe-area-inset-top, 0px);
+}
