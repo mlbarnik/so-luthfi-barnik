@@ -1,19 +1,5 @@
 'use client';
 
-// The package does not currently expose TypeScript declarations for this
-// subpath, so keep the runtime import typed locally below.
-// @ts-ignore -- intentional declaration for an untyped package subpath
-declare module 'barcode-detector/pure' {
-  export interface BarcodeDetectorOptions {
-    formats?: string[];
-  }
-
-  export class BarcodeDetector {
-    constructor(options?: BarcodeDetectorOptions);
-    detect(source: HTMLVideoElement): Promise<Array<{ rawValue: string }>>;
-  }
-}
-
 import { useEffect, useRef, useState } from 'react';
 import { X } from 'lucide-react';
 import { Input } from '@/components/ui/input';
