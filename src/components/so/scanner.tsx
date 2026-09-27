@@ -1,57 +1,92 @@
 'use client';
 
+// The package does not currently expose TypeScript declarations for this
+// subpath, so keep the runtime import typed locally below.
+// @ts-ignore -- intentional declaration for an untyped package subpath
+declare module 'barcode-detector/pure' {
+  export interface BarcodeDetectorOptions {
+    formats?: string[];
+  }
+
+  export class BarcodeDetector {
+    constructor(options?: BarcodeDetectorOptions);
+    detect(source: HTMLVideoElement): Promise<Array<{ rawValue: string }>>;
+  }
+}
+
 import { useEffect, useRef, useState } from 'react';
 import { X } from 'lucide-react';
 import { Input } from '@/components/ui/input';
 import { Button } from '@/components/ui/button';
 
+const FORMAT: BarcodeFormatSederhana[] = ['ean_13', 'ean_8', 'upc_a', 'upc_e', 'code_128', 'code_39'];
+type BarcodeFormatSederhana = 'ean_13' | 'ean_8' | 'upc_a' | 'upc_e' | 'code_128' | 'code_39';
+interface DetektorBarcode {
+  detect(source: HTMLVideoElement): Promise<Array<{ rawValue: string }>>;
+}
+
+type BarcodeDetectorCtor = new (options?: { formats?: string[] }) => DetektorBarcode;
+
 /**
  * Pemindai barcode kamera.
  *
- * CATATAN JUJUR (tolong dites di perangkat asli sebelum dipakai di
- * lapangan): pakai BarcodeDetector API bawaan browser kalau tersedia --
- * ini cepat dan tanpa dependency tambahan, TAPI baru didukung luas di
- * Chrome/Edge Android & desktop. Safari iOS pada umumnya BELUM mendukungnya
- * (per pengecekan terakhir). Untuk PIC yang pakai iPhone, kamu perlu
- * pustaka cadangan (mis. zxing-wasm atau @undecaf/barcode-detector-polyfill)
- * -- sengaja belum saya pasang di sini supaya kamu bisa pilih sendiri
- * setelah tahu device apa saja yang benar-benar dipakai di toko/gudang
- * (lihat pertanyaan soal ini di README). Selama itu, input manual di
- * bawah selalu tersedia sebagai jalan keluar yang pasti jalan di semua HP.
+ * Native `BarcodeDetector` bawaan browser dipakai kalau ada (cepat, tanpa
+ * download tambahan) -- ini yang jalan di Chrome/Edge Android & desktop.
+ * Kalau tidak ada (Safari/iOS, Firefox), fallback ke pustaka `barcode-detector`
+ * (WASM, ZXing-C++) yang di-import SECARA DINAMIS supaya file WASM-nya
+ * (~1-2 MB) cuma diunduh browser yang benar-benar butuh, tidak membebani
+ * pengguna Chrome yang sudah punya versi native-nya.
+ *
+ * BELUM SEMPAT DITES DI IPHONE SUNGGUHAN dari sandbox ini (tidak ada
+ * device fisik) -- coba dulu di lapangan sebelum dipakai serius. Kalau
+ * ternyata tetap ada masalah kamera di perangkat tertentu, input manual
+ * di bawah selalu tersedia sebagai jalan keluar yang pasti berfungsi.
  */
 export function Scanner({
   judul, onHasil, onTutup,
 }: { judul: string; onHasil: (kode: string) => void; onTutup: () => void }) {
   const videoRef = useRef<HTMLVideoElement>(null);
   const streamRef = useRef<MediaStream | null>(null);
-  const [dukung, setDukung] = useState<'cek' | 'ya' | 'tidak'>('cek');
+  const [siap, setSiap] = useState(false);
   const [manual, setManual] = useState('');
-  const [pesan, setPesan] = useState('Arahkan kamera ke barcode…');
+  const [pesan, setPesan] = useState('Menyiapkan pemindai…');
 
   useEffect(() => {
     let batal = false;
-    const punyaDetector = typeof window !== 'undefined' && 'BarcodeDetector' in window;
-    // Menyinkronkan state dengan kapabilitas browser -- pengecualian yang sah.
-    /* eslint-disable-next-line react-hooks/set-state-in-effect */
-    setDukung(punyaDetector ? 'ya' : 'tidak');
-    if (!punyaDetector) return;
-
     let frameId = 0;
+
     (async () => {
+      let detector: DetektorBarcode;
       try {
-        const stream = await navigator.mediaDevices.getUserMedia({
-          video: { facingMode: 'environment' },
-        });
+        if (typeof window !== 'undefined' && 'BarcodeDetector' in window) {
+          // @ts-expect-error -- BarcodeDetector belum ada di lib.dom.d.ts versi TS saat ini
+          detector = new window.BarcodeDetector({ formats: FORMAT });
+        } else {
+          // Diunduh hanya saat dibutuhkan (Safari/iOS, dst). WASM-nya
+          // diambil pustaka ini dari CDN jsDelivr saat runtime.
+          // The fallback package is optional and may not provide declarations
+          // in the consuming project; its runtime shape is declared above.
+          // @ts-ignore -- intentional dynamic import of an optionally installed package
+          const { BarcodeDetector: BarcodeDetectorWasm } = await import('barcode-detector/pure');
+          if (batal) return;
+          detector = new BarcodeDetectorWasm({ formats: FORMAT }) as unknown as DetektorBarcode;
+        }
+      } catch {
+        if (!batal) setPesan('Pemindai tidak bisa disiapkan di perangkat ini. Ketik kode manual di bawah.');
+        return;
+      }
+      if (batal) return;
+
+      try {
+        const stream = await navigator.mediaDevices.getUserMedia({ video: { facingMode: 'environment' } });
         if (batal) { stream.getTracks().forEach((t) => t.stop()); return; }
         streamRef.current = stream;
         if (videoRef.current) {
           videoRef.current.srcObject = stream;
           await videoRef.current.play();
         }
-        // @ts-expect-error -- BarcodeDetector belum ada di lib.dom.d.ts versi TS saat ini
-        const detector = new window.BarcodeDetector({
-          formats: ['ean_13', 'ean_8', 'upc_a', 'upc_e', 'code_128', 'code_39'],
-        });
+        setSiap(true);
+        setPesan('Arahkan kamera ke barcode…');
 
         const loop = async () => {
           if (batal || !videoRef.current) return;
@@ -68,7 +103,7 @@ export function Scanner({
         };
         frameId = requestAnimationFrame(loop);
       } catch {
-        setPesan('Tidak bisa mengakses kamera. Pastikan izin kamera diberikan, atau ketik kode manual.');
+        if (!batal) setPesan('Tidak bisa mengakses kamera. Pastikan izin kamera diberikan, atau ketik kode manual.');
       }
     })();
 
@@ -90,12 +125,10 @@ export function Scanner({
       </div>
 
       <div className="relative mx-6 flex flex-1 items-center justify-center overflow-hidden rounded-xl bg-neutral-900">
-        {dukung === 'ya' ? (
+        {siap ? (
           <video ref={videoRef} muted playsInline className="h-full w-full object-cover" />
         ) : (
-          <div className="p-6 text-center text-sm text-neutral-400">
-            {dukung === 'cek' ? 'Memeriksa dukungan kamera…' : 'Browser ini belum mendukung pemindaian barcode otomatis. Ketik kode di bawah.'}
-          </div>
+          <div className="p-6 text-center text-sm text-neutral-400">Menyiapkan…</div>
         )}
       </div>
 
