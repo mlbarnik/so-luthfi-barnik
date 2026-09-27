@@ -15,7 +15,6 @@ export function LoginForm() {
     if (pin.length >= 6) return;
     const baru = pin + k;
     setPin(baru);
-    if (baru.length === 4) kirim(baru);
   }
 
   function kirim(nilai: string) {
@@ -45,7 +44,7 @@ export function LoginForm() {
       </div>
 
       <div className="flex justify-center gap-3 pb-1 pt-5">
-        {[0, 1, 2, 3].map((i) => (
+        {[0, 1, 2, 3, 4, 5].map((i) => (
           <span
             key={i}
             className={`h-3.5 w-3.5 rounded-full border-[1.5px] ${
@@ -63,6 +62,7 @@ export function LoginForm() {
           <button
             key={k}
             onClick={() => (k === 'ok' ? pin.length >= 4 && kirim(pin) : tekan(k))}
+            disabled={pending}
             className="bg-neutral-900 py-4 text-3xl font-medium tabular-nums active:bg-neutral-800"
           >
             {k === 'del' ? <span className="text-xs font-semibold text-neutral-400">Hapus</span>
