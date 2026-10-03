@@ -4,6 +4,7 @@ import { useEffect, useRef, useState } from 'react';
 import { X } from 'lucide-react';
 import { Input } from '@/components/ui/input';
 import { Button } from '@/components/ui/button';
+import { cn } from '@/lib/utils';
 
 const FORMAT: BarcodeFormatSederhana[] = ['ean_13', 'ean_8', 'upc_a', 'upc_e', 'code_128', 'code_39'];
 type BarcodeFormatSederhana = 'ean_13' | 'ean_8' | 'upc_a' | 'upc_e' | 'code_128' | 'code_39';
@@ -11,22 +12,16 @@ interface DetektorBarcode {
   detect(source: HTMLVideoElement): Promise<Array<{ rawValue: string }>>;
 }
 
-type BarcodeDetectorCtor = new (options?: { formats?: string[] }) => DetektorBarcode;
-
 /**
  * Pemindai barcode kamera.
  *
- * Native `BarcodeDetector` bawaan browser dipakai kalau ada (cepat, tanpa
- * download tambahan) -- ini yang jalan di Chrome/Edge Android & desktop.
- * Kalau tidak ada (Safari/iOS, Firefox), fallback ke pustaka `barcode-detector`
- * (WASM, ZXing-C++) yang di-import SECARA DINAMIS supaya file WASM-nya
- * (~1-2 MB) cuma diunduh browser yang benar-benar butuh, tidak membebani
- * pengguna Chrome yang sudah punya versi native-nya.
- *
- * BELUM SEMPAT DITES DI IPHONE SUNGGUHAN dari sandbox ini (tidak ada
- * device fisik) -- coba dulu di lapangan sebelum dipakai serius. Kalau
- * ternyata tetap ada masalah kamera di perangkat tertentu, input manual
- * di bawah selalu tersedia sebagai jalan keluar yang pasti berfungsi.
+ * PERBAIKAN: elemen <video> sekarang SELALU ada di DOM (tidak dipasang
+ * belakangan secara kondisional). Sebelumnya <video> baru dirender
+ * setelah state `siap` jadi true, padahal effect mencoba menyambungkan
+ * stream kamera ke videoRef SEBELUM itu -- videoRef.current masih null
+ * saat itu, jadi srcObject tidak pernah terpasang walau browser sudah
+ * memberi izin kamera. Sekarang videoRef selalu terpasang; yang
+ * disembunyikan/ditampilkan cuma class CSS-nya.
  */
 export function Scanner({
   judul, onHasil, onTutup,
@@ -48,11 +43,6 @@ export function Scanner({
           // @ts-expect-error -- BarcodeDetector belum ada di lib.dom.d.ts versi TS saat ini
           detector = new window.BarcodeDetector({ formats: FORMAT });
         } else {
-          // Diunduh hanya saat dibutuhkan (Safari/iOS, dst). WASM-nya
-          // diambil pustaka ini dari CDN jsDelivr saat runtime.
-          // The fallback package is optional and may not provide declarations
-          // in the consuming project; its runtime shape is declared above.
-          // @ts-ignore -- intentional dynamic import of an optionally installed package
           const { BarcodeDetector: BarcodeDetectorWasm } = await import('barcode-detector/pure');
           if (batal) return;
           detector = new BarcodeDetectorWasm({ formats: FORMAT }) as unknown as DetektorBarcode;
@@ -67,10 +57,12 @@ export function Scanner({
         const stream = await navigator.mediaDevices.getUserMedia({ video: { facingMode: 'environment' } });
         if (batal) { stream.getTracks().forEach((t) => t.stop()); return; }
         streamRef.current = stream;
-        if (videoRef.current) {
-          videoRef.current.srcObject = stream;
-          await videoRef.current.play();
+        if (!videoRef.current) {
+          setPesan('Terjadi kesalahan internal (elemen video tidak ditemukan). Ketik kode manual di bawah.');
+          return;
         }
+        videoRef.current.srcObject = stream;
+        await videoRef.current.play();
         setSiap(true);
         setPesan('Arahkan kamera ke barcode…');
 
@@ -102,25 +94,28 @@ export function Scanner({
   }, [onHasil]);
 
   return (
-    <div className="fixed inset-0 z-50 flex flex-col bg-neutral-950 text-white">
-      <div className="flex items-center gap-3 px-4 py-3">
+    <div className="fixed inset-0 z-50 flex flex-col bg-neutral-950 text-white md:items-center">
+      <div className="flex w-full items-center gap-3 px-4 py-3 md:max-w-2xl">
         <b className="flex-1 text-[15px]">{judul}</b>
         <button onClick={onTutup} className="grid h-8 w-8 place-items-center rounded-full bg-white/10">
           <X className="h-4 w-4" />
         </button>
       </div>
 
-      <div className="relative mx-6 flex flex-1 items-center justify-center overflow-hidden rounded-xl bg-neutral-900">
-        {siap ? (
-          <video ref={videoRef} muted playsInline className="h-full w-full object-cover" />
-        ) : (
-          <div className="p-6 text-center text-sm text-neutral-400">Menyiapkan…</div>
-        )}
+      <div className="relative mx-6 flex w-[calc(100%-3rem)] flex-1 items-center justify-center overflow-hidden rounded-xl bg-neutral-900 md:max-w-2xl">
+        {/* video SELALU dirender -- videoRef harus ada sebelum stream disambungkan */}
+        <video
+          ref={videoRef}
+          muted
+          playsInline
+          className={cn('h-full w-full object-cover', !siap && 'hidden')}
+        />
+        {!siap && <div className="p-6 text-center text-sm text-neutral-400">Menyiapkan…</div>}
       </div>
 
-      <p className="px-6 pb-1 pt-3 text-center text-sm text-neutral-400">{pesan}</p>
+      <p className="w-full px-6 pb-1 pt-3 text-center text-sm text-neutral-400 md:max-w-2xl">{pesan}</p>
 
-      <div className="flex gap-2 p-4">
+      <div className="flex w-full gap-2 p-4 md:max-w-2xl">
         <Input
           value={manual}
           onChange={(e) => setManual(e.target.value)}

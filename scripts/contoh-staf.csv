@@ -1,7 +1,8 @@
-nama,inisial,role,pin
-Rina W.,RW,pic,246868
-Dedi P.,DP,pic,135757
-Robi,RB,ic,369090
-Vinkha,VK,kepala_toko,481212
-Suhendri,SH,spv,556666
-Pak Luthfi,LB,owner,999999
+nama,inisial,role,username,password
+Inventory Control,IC,ic,ic1,inventory12345
+Kepala Toko,KT,kepala_toko,kepalatoko,toko12345
+Asisten Kepala Toko,AK,kepala_toko,asistenkt,aktoko12345
+Supervisor,SPV,spv,spv1,spv12345
+General Manajer,GM,gm,General Manajer,gm12345
+Owner,LB,owner,luthfi,luthfi12345
+Yudha,PG,pic,yudha,yudha12345

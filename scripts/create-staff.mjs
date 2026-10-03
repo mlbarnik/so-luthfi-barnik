@@ -32,7 +32,7 @@ import { readFileSync } from 'node:fs';
 import { createClient } from '@supabase/supabase-js';
 
 const DOMAIN_INTERNAL = 'auth.luthfibarnik.internal';
-const PERAN_VALID = ['admin', 'pic', 'ic', 'kepala_toko', 'spv', 'owner'];
+const PERAN_VALID = ['admin', 'pic', 'ic', 'kepala_toko', 'spv', 'owner', 'gm'];
 
 function ambilArg(nama, wajib = false) {
   const i = process.argv.indexOf(`--${nama}`);
