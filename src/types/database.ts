@@ -7,7 +7,7 @@
  * File ini cukup dipakai sampai project Supabase-nya benar-benar ada.
  */
 
-export type Peran = 'admin' | 'pic' | 'ic' | 'kepala_toko' | 'spv' | 'owner';
+export type Peran = 'admin' | 'pic' | 'ic' | 'kepala_toko' | 'spv' | 'owner' | 'gm';
 export type TipeLokasi = 'rak' | 'palet' | 'showcase' | 'floor' | 'freezer' | 'buffer';
 export type AreaLokasi = 'toko' | 'gudang_lt3' | 'gudang_utama';
 export type ModeSO = 'awal' | 'harian';
@@ -136,4 +136,5 @@ export const HAK_AKSES: Record<Peran, { hitung: boolean; pemenuhanAksi: boolean;
   kepala_toko: { hitung: false, pemenuhanAksi: true,  pemenuhanLihat: true,  dashboard: false },
   spv:         { hitung: false, pemenuhanAksi: false, pemenuhanLihat: true,  dashboard: true },
   owner:       { hitung: false, pemenuhanAksi: false, pemenuhanLihat: true,  dashboard: true },
+  gm:          { hitung: false, pemenuhanAksi: false, pemenuhanLihat: true,  dashboard: true },
 };

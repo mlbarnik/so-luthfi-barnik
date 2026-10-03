@@ -3,7 +3,7 @@ import { wajibPeran } from '@/lib/so/guard';
 import { TombolSinkron } from '@/components/so/tombol-sinkron';
 
 export default async function HalamanDashboard() {
-  await wajibPeran(['admin', 'ic', 'spv', 'owner']);
+  await wajibPeran(['admin', 'ic', 'spv', 'owner', 'gm']);
   const supabase = await createClient();
 
   const [

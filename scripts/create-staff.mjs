@@ -3,24 +3,36 @@
  * scripts/create-staff.mjs
  *
  * Dijalankan SENDIRI oleh admin dari komputer sendiri (BUKAN dari dalam
- * aplikasi web) untuk membuat atau mereset login PIN seorang staf.
- * Butuh SUPABASE_SECRET_KEY -- jangan pernah taruh script atau env ini
- * di kode yang dikirim ke browser.
+ * aplikasi web) untuk membuat / mengatur akun staf. Butuh SUPABASE_SECRET_KEY
+ * -- jangan pernah taruh script atau env ini di kode yang dikirim ke browser.
  *
- * Cara pakai (Node 20.6+ punya --env-file bawaan, tidak perlu dotenv):
+ * Login staf = username + password (akun Supabase Auth biasa).
+ * Username "rina" tersimpan sebagai rina@auth.luthfibarnik.internal.
  *
- *   Staf baru:
+ *   Satu staf baru:
  *     node --env-file=.env.local scripts/create-staff.mjs \
- *       --nama "Rina W." --inisial RW --role pic --pin 2468
+ *       --nama "Rina W." --username rina --password rahasia123 --role pic
  *
- *   Reset PIN staf yang sudah ada:
- *     node --env-file=.env.local scripts/create-staff.mjs \
- *       --email pic-rw@auth.luthfibarnik.internal --reset --pin 1122
+ *   Banyak staf dari CSV (lihat scripts/contoh-staf.csv):
+ *     node --env-file=.env.local scripts/create-staff.mjs --csv scripts/daftar-staf.csv
+ *
+ *   Ganti password staf:
+ *     node --env-file=.env.local scripts/create-staff.mjs --reset --username rina --password baru12345
+ *
+ *   Ganti username akun lama (mis. akun era PIN yang emailnya panjang):
+ *     node --env-file=.env.local scripts/create-staff.mjs --reset \
+ *       --email <email-lama> --username-baru suhendri --password baru12345
+ *
+ *   Lihat semua staf (nama, peran, email login, aktif/tidak):
+ *     node --env-file=.env.local scripts/create-staff.mjs --daftar
  *
  * Peran yang valid: admin, pic, ic, kepala_toko, spv, owner
  */
+import { readFileSync } from 'node:fs';
 import { createClient } from '@supabase/supabase-js';
-import { randomBytes, createHmac, randomUUID } from 'node:crypto';
+
+const DOMAIN_INTERNAL = 'auth.luthfibarnik.internal';
+const PERAN_VALID = ['admin', 'pic', 'ic', 'kepala_toko', 'spv', 'owner'];
 
 function ambilArg(nama, wajib = false) {
   const i = process.argv.indexOf(`--${nama}`);
@@ -33,8 +45,6 @@ function ambilArg(nama, wajib = false) {
 }
 const adaFlag = (nama) => process.argv.includes(`--${nama}`);
 
-const PERAN_VALID = ['admin', 'pic', 'ic', 'kepala_toko', 'spv', 'owner'];
-
 function wajibEnv(nama) {
   const v = process.env[nama];
   if (!v) {
@@ -44,102 +54,157 @@ function wajibEnv(nama) {
   return v;
 }
 
-const SUPABASE_URL = wajibEnv('NEXT_PUBLIC_SUPABASE_URL');
-const SECRET_KEY = wajibEnv('SUPABASE_SECRET_KEY');
-const PIN_SECRET = wajibEnv('PIN_HMAC_SECRET');
-
-const admin = createClient(SUPABASE_URL, SECRET_KEY, {
+const admin = createClient(wajibEnv('NEXT_PUBLIC_SUPABASE_URL'), wajibEnv('SUPABASE_SECRET_KEY'), {
   auth: { autoRefreshToken: false, persistSession: false },
 });
 
-function hmacPin(pin) {
-  return createHmac('sha256', PIN_SECRET).update(pin.trim()).digest('hex');
-}
-function passwordInternalBaru() {
-  return randomBytes(24).toString('base64url');
-}
+const keEmail = (identitas) => {
+  const v = identitas.trim().toLowerCase();
+  return v.includes('@') ? v : `${v}@${DOMAIN_INTERNAL}`;
+};
 
-async function buatStafBaru() {
-  const nama = ambilArg('nama', true);
-  const inisial = (ambilArg('inisial') || nama.split(' ').map((s) => s[0]).join('').slice(0, 2)).toUpperCase();
-  const role = ambilArg('role', true);
-  const pin = ambilArg('pin', true);
-  const email = ambilArg('email') || `${role}-${inisial.toLowerCase()}-${randomUUID().slice(0, 6)}@auth.luthfibarnik.internal`;
-
-  if (!PERAN_VALID.includes(role)) {
-    console.error(`Peran '${role}' tidak dikenal. Pilih salah satu: ${PERAN_VALID.join(', ')}`);
-    process.exit(1);
+function cekUsername(u) {
+  if (!u || !/^[a-z0-9._-]{2,30}$/i.test(u)) {
+    throw new Error(`username '${u ?? ''}' tidak valid (2-30 karakter: huruf, angka, titik, strip, garis bawah, tanpa spasi)`);
   }
-  if (!/^\d{4,6}$/.test(pin)) {
-    console.error('PIN harus 4-6 digit angka.');
-    process.exit(1);
-  }
+}
+function cekPassword(p) {
+  if (!p || String(p).length < 6) throw new Error('password minimal 6 karakter');
+}
 
-  const passwordInternal = passwordInternalBaru();
+/** Cari user Auth berdasarkan email (jumlah staf kecil, cukup listUsers). */
+async function cariUserByEmail(email) {
+  for (let page = 1; page <= 10; page++) {
+    const { data, error } = await admin.auth.admin.listUsers({ page, perPage: 200 });
+    if (error) throw new Error(error.message);
+    const ketemu = data.users.find((u) => u.email?.toLowerCase() === email.toLowerCase());
+    if (ketemu) return ketemu;
+    if (data.users.length < 200) break;
+  }
+  return null;
+}
+
+/** Inti pembuatan satu staf. Melempar Error kalau gagal (tidak process.exit)
+ * supaya mode CSV bisa lanjut ke baris berikutnya. */
+async function buatSatuStaf({ nama, inisial, role, username, password, email }) {
+  if (!nama) throw new Error('nama kosong');
+  if (!PERAN_VALID.includes(role)) throw new Error(`peran '${role}' tidak dikenal (pilih: ${PERAN_VALID.join(', ')})`);
+  if (!email) cekUsername(username);
+  cekPassword(password);
+
+  const emailFinal = email ? email.trim().toLowerCase() : keEmail(username);
+  const inisialFinal = (inisial || nama.split(' ').map((s) => s[0]).join('')).slice(0, 2).toUpperCase();
 
   const { data: userBaru, error: errUser } = await admin.auth.admin.createUser({
-    email, password: passwordInternal, email_confirm: true,
+    email: emailFinal, password, email_confirm: true,
   });
-  if (errUser) {
-    console.error('Gagal membuat akun Supabase Auth:', errUser.message);
-    process.exit(1);
-  }
+  if (errUser) throw new Error(`akun Supabase Auth gagal dibuat -- ${errUser.message}`);
 
   const { error: errProfil } = await admin.from('profiles').insert({
-    id: userBaru.user.id, nama, inisial, role, aktif: true,
+    id: userBaru.user.id, nama, inisial: inisialFinal, role, aktif: true,
   });
   if (errProfil) {
-    console.error('Gagal menyimpan profil:', errProfil.message);
-    console.error('(Akun Auth sudah terlanjur dibuat, hapus manual dari dashboard Supabase kalau perlu ulang.)');
-    process.exit(1);
+    await admin.auth.admin.deleteUser(userBaru.user.id); // jangan sisakan akun yatim
+    throw new Error(`profil gagal disimpan, akun dibatalkan -- ${errProfil.message}`);
   }
+  return { nama, role, login: email ? emailFinal : username.trim().toLowerCase() };
+}
 
-  const { error: errKred } = await admin.from('staff_credentials').insert({
-    id: userBaru.user.id, email, pin_hmac: hmacPin(pin), internal_password: passwordInternal,
+function bacaCsv(path) {
+  const teks = readFileSync(path, 'utf8').trim();
+  const [barisHeader, ...barisData] = teks.split(/\r?\n/);
+  const kolom = barisHeader.split(',').map((k) => k.trim().toLowerCase());
+  return barisData.filter((b) => b.trim()).map((baris) => {
+    const nilai = baris.split(',').map((v) => v.trim());
+    const row = {};
+    kolom.forEach((k, i) => { row[k] = nilai[i]; });
+    return row;
   });
-  if (errKred) {
-    console.error('Gagal menyimpan kredensial:', errKred.message);
-    process.exit(1);
-  }
-
-  console.log(`\nStaf dibuat:\n  Nama   : ${nama}\n  Peran  : ${role}\n  PIN    : ${pin}\n  Email internal: ${email} (bukan email sungguhan, jangan dipakai untuk apa pun selain login sistem)\n`);
 }
 
-async function resetPin() {
-  const email = ambilArg('email', true);
-  const pin = ambilArg('pin', true);
-  if (!/^\d{4,6}$/.test(pin)) {
-    console.error('PIN harus 4-6 digit angka.');
-    process.exit(1);
+async function buatDariCsv(path) {
+  const baris = bacaCsv(path);
+  const dipakai = new Map();
+  console.log(`Membaca ${baris.length} baris dari ${path}...\n`);
+  let sukses = 0, gagal = 0;
+  for (const [i, r] of baris.entries()) {
+    const no = i + 2;
+    const u = (r.username ?? '').toLowerCase();
+    if (u && dipakai.has(u)) {
+      console.error(`Baris ${no} (${r.nama}): GAGAL -- username '${u}' dobel dengan baris untuk "${dipakai.get(u)}".`);
+      gagal++;
+      continue;
+    }
+    try {
+      const h = await buatSatuStaf(r);
+      dipakai.set(u, r.nama);
+      console.log(`Baris ${no} (${h.nama}, ${h.role}): OK -- login: ${h.login}`);
+      sukses++;
+    } catch (err) {
+      console.error(`Baris ${no} (${r.nama ?? '?'}): GAGAL -- ${err.message}`);
+      gagal++;
+    }
   }
-
-  const { data: kred, error: errCari } = await admin
-    .from('staff_credentials').select('id').eq('email', email).maybeSingle();
-  if (errCari || !kred) {
-    console.error('Staf dengan email tersebut tidak ditemukan.');
-    process.exit(1);
-  }
-
-  const passwordBaru = passwordInternalBaru();
-  const { error: errAuth } = await admin.auth.admin.updateUserById(kred.id, { password: passwordBaru });
-  if (errAuth) {
-    console.error('Gagal mengubah password Supabase Auth:', errAuth.message);
-    process.exit(1);
-  }
-
-  const { error: errUpdate } = await admin.from('staff_credentials').update({
-    pin_hmac: hmacPin(pin), internal_password: passwordBaru,
-    failed_attempts: 0, locked_until: null, updated_at: new Date().toISOString(),
-  }).eq('id', kred.id);
-  if (errUpdate) {
-    console.error('Gagal menyimpan PIN baru:', errUpdate.message);
-    process.exit(1);
-  }
-
-  console.log(`\nPIN untuk ${email} berhasil direset ke: ${pin}\n`);
+  console.log(`\nSelesai: ${sukses} berhasil, ${gagal} gagal.`);
+  if (gagal > 0) process.exitCode = 1;
 }
 
-(adaFlag('reset') ? resetPin() : buatStafBaru()).catch((err) => {
-  console.error('Terjadi kesalahan tak terduga:', err);
+async function buatSatuDariArgv() {
+  const h = await buatSatuStaf({
+    nama: ambilArg('nama', true),
+    inisial: ambilArg('inisial'),
+    role: ambilArg('role', true),
+    username: ambilArg('username'),
+    email: ambilArg('email'),
+    password: ambilArg('password', true),
+  });
+  console.log(`\nStaf dibuat:\n  Nama    : ${h.nama}\n  Peran   : ${h.role}\n  Login   : ${h.login}\n  (password sesuai yang kamu ketik tadi)\n`);
+}
+
+async function resetAkun() {
+  const identitas = ambilArg('username') || ambilArg('email');
+  if (!identitas) throw new Error('isi --username atau --email akun yang mau diubah');
+  const usernameBaru = ambilArg('username-baru');
+  const password = ambilArg('password');
+  if (!password && !usernameBaru) throw new Error('isi --password baru dan/atau --username-baru');
+  if (password) cekPassword(password);
+  if (usernameBaru) cekUsername(usernameBaru);
+
+  const emailLama = keEmail(identitas);
+  const user = await cariUserByEmail(emailLama);
+  if (!user) throw new Error(`akun dengan email ${emailLama} tidak ditemukan (coba --daftar untuk melihat semua akun)`);
+
+  const perubahan = { email_confirm: true };
+  if (password) perubahan.password = password;
+  if (usernameBaru) perubahan.email = keEmail(usernameBaru);
+
+  const { error } = await admin.auth.admin.updateUserById(user.id, perubahan);
+  if (error) throw new Error(`gagal mengubah akun -- ${error.message}`);
+
+  console.log(`\nAkun ${emailLama} berhasil diubah.${usernameBaru ? `\n  Username baru: ${usernameBaru.toLowerCase()}` : ''}${password ? '\n  Password baru sudah aktif.' : ''}\n`);
+}
+
+async function daftarStaf() {
+  const { data: profil, error } = await admin.from('profiles').select('id, nama, role, aktif').order('nama');
+  if (error) throw new Error(error.message);
+  const emailPerId = new Map();
+  for (let page = 1; page <= 10; page++) {
+    const { data } = await admin.auth.admin.listUsers({ page, perPage: 200 });
+    data.users.forEach((u) => emailPerId.set(u.id, u.email));
+    if (data.users.length < 200) break;
+  }
+  console.log('\nNAMA'.padEnd(22) + 'PERAN'.padEnd(14) + 'AKTIF'.padEnd(7) + 'LOGIN (email)');
+  for (const p of profil) {
+    const email = emailPerId.get(p.id) ?? '-';
+    const login = email.endsWith(`@${DOMAIN_INTERNAL}`) ? email.split('@')[0] : email;
+    console.log(p.nama.padEnd(21) + ' ' + p.role.padEnd(13) + ' ' + String(p.aktif).padEnd(6) + ' ' + login + `   <${email}>`);
+  }
+  console.log('');
+}
+
+const csvPath = ambilArg('csv');
+const jalan = adaFlag('daftar') ? daftarStaf() : adaFlag('reset') ? resetAkun() : csvPath ? buatDariCsv(csvPath) : buatSatuDariArgv();
+jalan.catch((err) => {
+  console.error('\nGAGAL:', err.message);
   process.exit(1);
 });

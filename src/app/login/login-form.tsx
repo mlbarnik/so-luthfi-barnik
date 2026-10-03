@@ -2,78 +2,111 @@
 
 import { useState, useTransition } from 'react';
 import { useRouter } from 'next/navigation';
+import { Eye, EyeOff } from 'lucide-react';
+import { Button } from '@/components/ui/button';
+import { Input } from '@/components/ui/input';
 
 export function LoginForm() {
   const router = useRouter();
-  const [pin, setPin] = useState('');
+  const [identitas, setIdentitas] = useState('');
+  const [password, setPassword] = useState('');
+  const [lihat, setLihat] = useState(false);
   const [error, setError] = useState('');
   const [pending, start] = useTransition();
 
-  function tekan(k: string) {
+  function kirim(e: React.FormEvent) {
+    e.preventDefault();
+    if (pending) return;
     setError('');
-    if (k === 'del') return setPin((p) => p.slice(0, -1));
-    if (pin.length >= 6) return;
-    const baru = pin + k;
-    setPin(baru);
-  }
-
-  function kirim(nilai: string) {
     start(async () => {
-      const res = await fetch('/api/auth/login', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ pin: nilai }),
-      });
-      const json = await res.json();
-      if (!json.ok) {
-        setError(json.error ?? 'PIN salah.');
-        setPin('');
-        return;
+      try {
+        const res = await fetch('/api/auth/login', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ identitas, password }),
+        });
+        const json = await res.json();
+        if (!json.ok) {
+          setError(json.error ?? 'Login gagal.');
+          setPassword('');
+          return;
+        }
+        router.replace('/');
+        router.refresh();
+      } catch {
+        setError('Tidak ada koneksi ke server. Coba lagi.');
       }
-      router.replace('/');
-      router.refresh();
     });
   }
 
   return (
-    <div className="flex min-h-dvh flex-col bg-neutral-900 text-neutral-50">
-      <div className="flex flex-1 flex-col justify-end px-6 pb-4 pt-10">
-        <div className="font-semibold tracking-[0.2em] text-amber-400 text-xs">LUTHFI BARNIK · DURI</div>
-        <h1 className="mt-2 text-5xl font-bold leading-[0.95]">Stock<br />Opname</h1>
-        <p className="mt-2 text-sm text-neutral-400">Masukkan PIN untuk mulai.</p>
+    <div className="grid min-h-dvh md:grid-cols-2">
+      {/* Panel merek: di HP jadi header atas, di tablet/PC jadi sisi kiri */}
+      <div className="flex flex-col justify-end bg-neutral-900 px-6 pb-8 pt-14 text-neutral-50 md:justify-center md:px-12 md:py-12">
+        <div className="text-xs font-semibold tracking-[0.2em] text-amber-400">LUTHFI BARNIK · DURI</div>
+        <h1 className="mt-2 text-5xl font-bold leading-[0.95] md:text-6xl">Stock<br />Opname</h1>
+        <p className="mt-3 max-w-sm text-sm text-neutral-400">
+          Pendataan barang, hitung stok, dan pemenuhan display — dari HP, tablet, atau komputer.
+        </p>
       </div>
 
-      <div className="flex justify-center gap-3 pb-1 pt-5">
-        {[0, 1, 2, 3, 4, 5].map((i) => (
-          <span
-            key={i}
-            className={`h-3.5 w-3.5 rounded-full border-[1.5px] ${
-              i < pin.length ? 'border-amber-400 bg-amber-400' : 'border-neutral-500'
-            }`}
-          />
-        ))}
-      </div>
-      <div className="min-h-6 px-6 text-center text-sm text-red-400">
-        {pending ? 'Memeriksa…' : error}
-      </div>
+      <div className="flex items-start justify-center bg-white px-6 py-8 dark:bg-neutral-950 md:items-center md:px-12">
+        <form onSubmit={kirim} className="w-full max-w-sm space-y-4">
+          <div>
+            <h2 className="text-xl font-semibold">Masuk</h2>
+            <p className="text-sm text-neutral-500">Pakai username dan password dari admin.</p>
+          </div>
 
-      <div className="grid grid-cols-3 gap-px border-t border-white/10 bg-white/10">
-        {['1', '2', '3', '4', '5', '6', '7', '8', '9', 'del', '0', 'ok'].map((k) => (
-          <button
-            key={k}
-            onClick={() => (k === 'ok' ? pin.length >= 4 && kirim(pin) : tekan(k))}
-            disabled={pending}
-            className="bg-neutral-900 py-4 text-3xl font-medium tabular-nums active:bg-neutral-800"
-          >
-            {k === 'del' ? <span className="text-xs font-semibold text-neutral-400">Hapus</span>
-              : k === 'ok' ? <span className="text-xs font-semibold text-neutral-400">Masuk</span>
-              : k}
-          </button>
-        ))}
+          <label className="block">
+            <span className="mb-1.5 block text-[13px] font-semibold text-neutral-600 dark:text-neutral-300">Username</span>
+            <Input
+              value={identitas}
+              onChange={(e) => setIdentitas(e.target.value)}
+              placeholder="contoh: rina"
+              autoComplete="username"
+              autoCapitalize="none"
+              autoCorrect="off"
+              spellCheck={false}
+              autoFocus
+            />
+          </label>
+
+          <label className="block">
+            <span className="mb-1.5 block text-[13px] font-semibold text-neutral-600 dark:text-neutral-300">Password</span>
+            <div className="relative">
+              <Input
+                type={lihat ? 'text' : 'password'}
+                value={password}
+                onChange={(e) => setPassword(e.target.value)}
+                autoComplete="current-password"
+                className="pr-11"
+              />
+              <button
+                type="button"
+                onClick={() => setLihat((v) => !v)}
+                aria-label={lihat ? 'Sembunyikan password' : 'Lihat password'}
+                className="absolute right-1 top-1/2 grid h-9 w-9 -translate-y-1/2 place-items-center text-neutral-500"
+              >
+                {lihat ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
+              </button>
+            </div>
+          </label>
+
+          {error && (
+            <p role="alert" className="rounded-lg bg-red-50 p-3 text-[13px] text-red-700 dark:bg-red-950 dark:text-red-300">
+              {error}
+            </p>
+          )}
+
+          <Button type="submit" size="lg" className="w-full" disabled={pending || !identitas.trim() || password.length < 6}>
+            {pending ? 'Memeriksa…' : 'Masuk'}
+          </Button>
+
+          <p className="text-center text-xs text-neutral-400">
+            Lupa password? Minta admin menggantinya.
+          </p>
+        </form>
       </div>
-      <p className="bg-neutral-900 px-6 pb-6 pt-3 text-center text-[11px] text-neutral-500">
-        Lupa PIN? Minta admin mereset lewat <code className="text-amber-400">scripts/create-staff.mjs --reset</code>.
-      </p>
     </div>
   );
 }
