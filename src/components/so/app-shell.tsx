@@ -3,7 +3,7 @@
 import { usePathname } from 'next/navigation';
 import Link from 'next/link';
 import {
-  ScanLine, ClipboardList, History, LayoutDashboard, PackageSearch, UserRound,
+  ScanLine, ClipboardList, History, LayoutDashboard, PackageSearch, UserRound, UploadCloud,
 } from 'lucide-react';
 import type { Profile } from '@/types/database';
 import { HAK_AKSES } from '@/types/database';
@@ -24,10 +24,17 @@ function tabsUntuk(profil: Profile) {
   if (hak.pemenuhanLihat) tabs.push({ href: '/pemenuhan', label: 'Pemenuhan', icon: PackageSearch });
   if (hak.dashboard) tabs.push({ href: '/dashboard', label: 'Dashboard', icon: LayoutDashboard });
   tabs.push({ href: '/riwayat', label: 'Riwayat', icon: History });
+  if (hak.impor) tabs.push({ href: '/impor', label: 'Impor Data', icon: UploadCloud });
   tabs.push({ href: '/akun', label: 'Akun', icon: UserRound });
   return tabs;
 }
 
+/**
+ * Kerangka aplikasi yang menyesuaikan lebar layar:
+ *  - HP (< 768px)     : header atas + tab bar di bawah (mudah dijangkau satu tangan)
+ *  - Tablet (>= 768px): sidebar ikon di kiri, konten melebar
+ *  - PC (>= 1024px)   : sidebar dengan label penuh, konten sampai ~1152px
+ */
 export function AppShell({ profil, children }: { profil: Profile; children: React.ReactNode }) {
   const pathname = usePathname();
   const tabs = tabsUntuk(profil);
@@ -45,7 +52,7 @@ export function AppShell({ profil, children }: { profil: Profile; children: Reac
           </div>
         </div>
 
-        <nav className="flex flex-1 flex-col gap-1 px-2.5">
+        <nav className="flex flex-1 flex-col gap-1 px-2.5 overflow-y-auto">
           {tabs.map(({ href, label, icon: Icon }) => {
             const aktif = pathname === href;
             return (
@@ -94,8 +101,8 @@ export function AppShell({ profil, children }: { profil: Profile; children: Reac
         </main>
 
         <nav
-          className="sticky bottom-0 grid border-t border-neutral-200 bg-white pb-[env(safe-area-inset-bottom)] dark:border-neutral-800 dark:bg-neutral-950 md:hidden"
-          style={{ gridTemplateColumns: `repeat(${tabs.length}, minmax(0,1fr))` }}
+          className="sticky bottom-0 grid border-t border-neutral-200 bg-white pb-[env(safe-area-inset-bottom)] dark:border-neutral-800 dark:bg-neutral-950 md:hidden overflow-x-auto"
+          style={{ gridTemplateColumns: `repeat(${tabs.length}, minmax(64px,1fr))` }}
         >
           {tabs.map(({ href, label, icon: Icon }) => {
             const aktif = pathname === href;
