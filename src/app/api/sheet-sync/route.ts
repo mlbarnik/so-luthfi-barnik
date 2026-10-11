@@ -3,6 +3,8 @@ import { z } from 'zod';
 import { profilAPI } from '@/lib/so/guard';
 import { sinkronSnapshotKeSheet } from '@/lib/so/sheets';
 
+export const maxDuration = 60; // ribuan baris stok + penulisan ke Google bisa > 10 detik
+
 const BodySchema = z.object({ session_id: z.string().uuid().optional() });
 
 export async function POST(req: NextRequest) {

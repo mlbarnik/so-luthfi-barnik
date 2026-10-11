@@ -9,7 +9,7 @@
 
 export type Peran = 'admin' | 'pic' | 'ic' | 'kepala_toko' | 'spv' | 'owner' | 'gm';
 export type TipeLokasi = 'rak' | 'pallet' | 'display_gawang' | 'wall_hanger' | 'showcase' | 'floor' | 'freezer' | 'buffer';
-export type AreaLokasi = 'toko' | 'gudang_lt3' | 'gudang_utama';
+export type AreaLokasi = 'toko' | 'gudang_inventory' | 'gudang_utama';
 export type ModeSO = 'awal' | 'harian';
 export type ModeItem = 'BARU' | 'ADD' | 'OVERWRITE';
 export type StatusPemenuhan = 'baru' | 'disiapkan' | 'eskalasi' | 'display';
@@ -132,10 +132,10 @@ export interface SubmitResult {
 /** Peta hak akses per peran — dipakai UI (nav, proxy, dan RLS server). */
 export const HAK_AKSES: Record<Peran, { hitung: boolean; pemenuhanAksi: boolean; pemenuhanLihat: boolean; dashboard: boolean; impor: boolean }> = {
   admin:       { hitung: true,  pemenuhanAksi: true,  pemenuhanLihat: true,  dashboard: true,  impor: true  },
-  pic:         { hitung: true,  pemenuhanAksi: false, pemenuhanLihat: false, dashboard: false, impor: false },
+  pic:         { hitung: true,  pemenuhanAksi: true, pemenuhanLihat: true, dashboard: false, impor: false },
   ic:          { hitung: true,  pemenuhanAksi: true,  pemenuhanLihat: true,  dashboard: true,  impor: false },
-  kepala_toko: { hitung: false, pemenuhanAksi: true,  pemenuhanLihat: true,  dashboard: false, impor: false },
-  spv:         { hitung: false, pemenuhanAksi: false, pemenuhanLihat: true,  dashboard: true,  impor: false },
-  owner:       { hitung: false, pemenuhanAksi: false, pemenuhanLihat: true,  dashboard: true,  impor: false },
+  kepala_toko: { hitung: true, pemenuhanAksi: true,  pemenuhanLihat: true,  dashboard: false, impor: false },
+  spv:         { hitung: true, pemenuhanAksi: true, pemenuhanLihat: true,  dashboard: true,  impor: false },
+  owner:       { hitung: true, pemenuhanAksi: true, pemenuhanLihat: true,  dashboard: true,  impor: false },
   gm:          { hitung: false, pemenuhanAksi: false, pemenuhanLihat: true,  dashboard: true,  impor: false },
 };
